@@ -1,0 +1,11 @@
+[package]
+name = "wasm"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+wasm-bindgen = "*"
+egg = { version = "*", features = ["wasm-bindgen"] }
+
+[lib]
+crate-type = ["cdylib"]
