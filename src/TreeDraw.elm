@@ -20,31 +20,29 @@ type alias TreeRenderInfo =
     }
 
 
-config : { fontSize : Float, fontScale : Float, spacing : Float, nodeR : Float }
-config =
-    { fontSize = 20, fontScale = 0.4, spacing = 0.5, nodeR = 0.15 }
-
-
 viewExpr : Expr -> Html ()
 viewExpr e =
     let
+        config =
+            { fontSize = 20, fontScale = 0.4, nodeR = 0.15 }
+
         unMaybe =
             Maybe.withDefault 0
 
         ri =
-            renderExpr e
+            renderExpr config.nodeR e
 
         l =
             List.minimum ri.contour.left |> unMaybe
 
         width =
-            List.maximum ri.contour.right |> unMaybe |> (\x -> x - l)
+            List.maximum ri.contour.right |> unMaybe |> (\x -> x - l + config.nodeR * 2 + 0.3)
 
         depth x =
             List.map (Tuple.first >> depth) (getChildren x.children) |> List.maximum |> unMaybe |> (+) 1
 
         height =
-            depth ri |> (\x -> x - 1) |> toFloat |> (+) (2 * config.spacing)
+            depth ri |> (\x -> x - 1) |> toFloat |> (+) (2 * config.nodeR + 0.1)
 
         getChildren (Children xs) =
             xs
@@ -54,10 +52,10 @@ viewExpr e =
         , SA.strokeWidth "0.01"
         , SA.fontSize <| String.fromFloat config.fontScale
         , SA.height <| String.fromFloat <| (config.fontSize * height / config.fontScale)
-        , SA.width <| String.fromFloat <| (config.fontSize * width / config.fontScale)
-        , SA.viewBox <| String.fromFloat l ++ " " ++ String.fromFloat -config.spacing ++ " " ++ String.fromFloat width ++ " " ++ String.fromFloat height
+        , SA.width <| String.fromFloat <| (config.fontSize * (width / config.fontScale))
+        , SA.viewBox <| String.fromFloat l ++ " " ++ String.fromFloat -config.nodeR ++ " " ++ String.fromFloat width ++ " " ++ String.fromFloat height
         ]
-        [ drawTree 0 0 ri ]
+        [ drawTree config.nodeR 0 0 ri ]
 
 
 translate : Float -> Float -> Svg.Attribute ()
@@ -65,8 +63,8 @@ translate x y =
     SA.transform <| "translate(" ++ String.fromFloat x ++ "," ++ String.fromFloat y ++ ")"
 
 
-drawTree : Float -> Float -> TreeRenderInfo -> Svg.Svg ()
-drawTree posx posy ri =
+drawTree : Float -> Float -> Float -> TreeRenderInfo -> Svg.Svg ()
+drawTree nodeR posx posy ri =
     let
         drawArrow x y =
             Svg.line
@@ -74,13 +72,13 @@ drawTree posx posy ri =
                 []
 
         drawNode label =
-            [ Svg.circle [ SA.r <| String.fromFloat config.nodeR, SA.cx "0", SA.cy "0", SA.fill "white" ] []
-            , Svg.text_ [ SA.x "0.2", SA.y "0.1" ] [ Svg.text <| label ]
+            [ Svg.circle [ SA.r <| String.fromFloat nodeR, SA.cx "0", SA.cy "0", SA.fill "white" ] []
+            , Svg.text_ [ SA.x <| String.fromFloat nodeR, SA.y <| String.fromFloat nodeR ] [ Svg.text <| label ]
             ]
 
         drawChild ( x, disp ) =
             [ drawArrow disp 1
-            , drawTree disp 1 x
+            , drawTree nodeR disp 1 x
             ]
 
         getChildren (Children xs) =
@@ -89,43 +87,33 @@ drawTree posx posy ri =
     List.concatMap drawChild (getChildren ri.children) ++ drawNode ri.label |> Svg.g [ translate posx posy ]
 
 
-renderExpr : Expr -> TreeRenderInfo
-renderExpr e =
+renderExpr : Float -> Expr -> TreeRenderInfo
+renderExpr nodeR e =
     let
         extend fst xs ys =
             fst :: (xs ++ List.drop (List.length xs) ys)
 
-        extendContour str contour =
-            { left = -config.nodeR :: contour.left
-            , right = config.nodeR + config.fontScale * (String.length str |> toFloat) :: contour.right
-            }
-
-        renderNullary str =
-            { contour = extendContour str { left = [], right = [] }
-            , label = str
-            , children = Children []
+        renderInfo label children contour =
+            { contour =
+                { left = -nodeR :: contour.left
+                , right = nodeR :: contour.right
+                }
+            , label = label
+            , children = Children children
             }
 
         renderUnary str child =
-            { contour = extendContour str child.contour
-            , label = str
-            , children = Children [ ( child, 0 ) ]
-            }
+            renderInfo str [ ( child, 0 ) ] child.contour
 
         renderBinErr str child =
-            -- TODO 1.35?
-            { contour =
-                extendContour str
-                    { left = List.map (\x -> x - 1.35) child.contour.left
-                    , right = List.map (\x -> x - 1.35) child.contour.right
-                    }
-            , label = str
-            , children = Children [ ( child, -1.35 ) ]
-            }
+            renderInfo str
+                [ ( child, -1 - nodeR ) ]
+                { left = List.map (\x -> x - 1 - nodeR) child.contour.left
+                , right = List.map (\x -> x - 1 - nodeR) child.contour.right
+                }
 
         renderBinary str l r =
             let
-                -- TODO problem here
                 distHalf =
                     List.map2 (-) r.contour.left l.contour.right
                         |> List.minimum
@@ -134,60 +122,85 @@ renderExpr e =
                         |> Basics.max 0
                         |> (+) 1
             in
-            { contour =
-                extendContour str
-                    { left =
-                        extend
-                            -config.nodeR
-                            (List.map (\x -> x - distHalf) l.contour.left)
-                            (List.map (\x -> x + distHalf) r.contour.left)
-                    , right =
-                        extend
-                            config.nodeR
-                            (List.map (\x -> x + distHalf) r.contour.right)
-                            (List.map (\x -> x - distHalf) l.contour.right)
-                    }
-            , label = str
-            , children = Children [ ( l, -distHalf ), ( r, distHalf ) ]
-            }
+            renderInfo str
+                [ ( l, -distHalf ), ( r, distHalf ) ]
+                { left =
+                    extend
+                        -nodeR
+                        (List.map (\x -> x - distHalf) l.contour.left)
+                        (List.map (\x -> x + distHalf) r.contour.left)
+                , right =
+                    extend
+                        nodeR
+                        (List.map (\x -> x + distHalf) r.contour.right)
+                        (List.map (\x -> x - distHalf) l.contour.right)
+                }
     in
     case e of
         Nullary tag ->
-            renderNullary <| renderTag tag
+            renderInfo (renderTag tag) [] { left = [], right = [] }
 
         Unary tag child ->
-            renderUnary (renderTag tag) <| renderExpr child
+            renderUnary (renderTag tag) <| renderExpr nodeR child
 
         Binary tag lChild rChild ->
-            renderBinary (renderTag tag) (renderExpr lChild) (renderExpr rChild)
+            renderBinary (renderTag tag) (renderExpr nodeR lChild) (renderExpr nodeR rChild)
 
         Impossible ->
-            renderNullary "Impossible"
+            renderInfo "Impossible" [] { left = [], right = [] }
 
         NodeError ->
-            renderNullary "N"
+            renderInfo "✖" [] { left = [], right = [] }
 
         LeftExprError l ->
-            renderBinErr "?" <| renderExpr l
+            renderBinErr "" <| renderExpr nodeR l
 
         BinTagError l ->
-            renderBinErr "!" <| renderExpr l
+            renderBinErr "✖" <| renderExpr nodeR l
 
         RightExprError tag l r ->
-            renderBinary (renderTag tag) (renderExpr l) (renderExpr r)
+            renderBinary (renderTag tag) (renderExpr nodeR l) (renderExpr nodeR r)
 
         BracketError tag l r ->
-            renderBinary (renderTag tag ++ ")") (renderExpr l) (renderExpr r)
+            renderBinary (renderTag tag ++ "✖") (renderExpr nodeR l) (renderExpr nodeR r)
 
 
 renderTag : ExprTag -> String
 renderTag e =
+    let
+        renderVarTag tag =
+            case tag of
+                Language.P ->
+                    "p"
+
+                Language.Q ->
+                    "q"
+
+                Language.R ->
+                    "r"
+
+                Language.S ->
+                    "s"
+
+        digits n =
+            if n == 0 then
+                []
+
+            else
+                Basics.modBy 10 n :: digits (n // 10)
+
+        getInd n =
+            digits n |> List.reverse |> List.map (\d -> Char.fromCode (Char.toCode '₀' + d)) |> String.fromList
+    in
     case e of
         T ->
             "⊤"
 
         F ->
             "⊥"
+
+        Var tag ind ->
+            renderVarTag tag ++ (Maybe.map getInd ind |> Maybe.withDefault "")
 
         Not ->
             "¬"

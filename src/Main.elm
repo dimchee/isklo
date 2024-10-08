@@ -66,9 +66,14 @@ view model =
             , value model.expr
             ]
             []
-        , div []
-            <| case Language.parse model.expr of
-                Language.Parsed e -> [ viewExpr e |> Html.map (always NoOp)]
-                Language.LongInput e -> [ viewExpr e |> Html.map (always NoOp), text "Long......."]
-                _ -> [ text "IMPOSSIBLE" ]
+        , div [] <|
+            case Language.parse model.expr of
+                Ok (Language.Parsed e) ->
+                    [ viewExpr e |> Html.map (always NoOp) ]
+
+                Ok (Language.LongInput e) ->
+                    [ viewExpr e |> Html.map (always NoOp), text "Long......." ]
+
+                Err e ->
+                    [ text <| Debug.toString e ]
         ]

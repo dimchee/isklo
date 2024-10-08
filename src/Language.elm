@@ -1,4 +1,4 @@
-module Language exposing (Expr(..), ExprTag(..), ParsingResult(..), parse)
+module Language exposing (Expr(..), ExprTag(..), ParsingResult(..), VarTag(..), parse)
 
 import Parser as P exposing ((|.), (|=), Parser)
 
@@ -14,11 +14,22 @@ type Expr
     | RightExprError ExprTag Expr Expr
     | BracketError ExprTag Expr Expr
 
-type ParsingResult = UnknownError String | LongInput Expr | Parsed Expr
+
+type ParsingResult
+    = LongInput Expr
+    | Parsed Expr
+
+
+type VarTag
+    = P
+    | Q
+    | R
+    | S
 
 
 type ExprTag
-    = T
+    = Var VarTag (Maybe Int)
+    | T
     | F
     | Not
     | And
@@ -27,18 +38,14 @@ type ExprTag
     | Iff
 
 
-parse : String -> ParsingResult
-parse s =
-    case P.run (P.succeed (\e f -> f e) 
-        |= expr 
-        |. P.spaces
-        |= P.oneOf [ P.succeed Parsed |. P.end, P.succeed LongInput ]
-    ) s of
-        Ok x ->
-            x
-
-        Err e ->
-            UnknownError <| Debug.toString e
+parse : String -> Result (List P.DeadEnd) ParsingResult
+parse =
+    P.run
+        (P.succeed (\e f -> f e)
+            |= expr
+            |. P.spaces
+            |= P.oneOf [ P.succeed Parsed |. P.end, P.succeed LongInput ]
+        )
 
 
 makeBinary : Expr -> Maybe ExprTag -> Expr -> Bool -> Expr
@@ -59,6 +66,37 @@ makeBinary e1 mtag e2 b =
 
             else
                 BracketError tag e1 e2
+
+
+variable : Parser Expr
+variable =
+    P.succeed
+        (\str m ->
+            case m of
+                Just (Just x) ->
+                    Nullary (Var str (Just x))
+
+                Nothing ->
+                    Nullary (Var str Nothing)
+
+                _ ->
+                    NodeError
+        )
+        |= P.oneOf
+            [ P.succeed P |. P.symbol "p"
+            , P.succeed Q |. P.symbol "q"
+            , P.succeed R |. P.symbol "r"
+            , P.succeed S |. P.symbol "s"
+            ]
+        |= P.oneOf
+            [ P.succeed Just
+                |. P.symbol "_"
+                |= P.oneOf
+                    [ P.succeed Just |= P.int
+                    , P.succeed Nothing
+                    ]
+            , P.succeed Nothing
+            ]
 
 
 expr : Parser Expr
@@ -86,5 +124,6 @@ expr =
             |= P.lazy (\_ -> expr)
             |. P.spaces
             |= P.oneOf [ P.succeed True |. P.symbol ")", P.succeed False |. P.chompWhile (always True) ]
+        , variable
         , P.succeed NodeError |. P.chompWhile (always True)
         ]
