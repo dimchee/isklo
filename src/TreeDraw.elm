@@ -1,4 +1,4 @@
-module TreeDraw exposing (viewExpr)
+module TreeDraw exposing (viewExpr, renderVarTag, renderTag)
 
 import Html exposing (Html)
 import Language exposing (..)
@@ -165,10 +165,10 @@ renderExpr nodeR e =
             renderBinary (renderTag tag ++ "✖") (renderExpr nodeR l) (renderExpr nodeR r)
 
 
-renderTag : ExprTag -> String
-renderTag e =
+renderVarTag : VarTag -> Maybe Int -> String
+renderVarTag tag ind =
     let
-        renderVarTag tag =
+        str =
             case tag of
                 Language.P ->
                     "p"
@@ -192,6 +192,11 @@ renderTag e =
         getInd n =
             digits n |> List.reverse |> List.map (\d -> Char.fromCode (Char.toCode '₀' + d)) |> String.fromList
     in
+    str ++ (Maybe.map getInd ind |> Maybe.withDefault "")
+
+
+renderTag : ExprTag -> String
+renderTag e =
     case e of
         T ->
             "⊤"
@@ -200,7 +205,7 @@ renderTag e =
             "⊥"
 
         Var tag ind ->
-            renderVarTag tag ++ (Maybe.map getInd ind |> Maybe.withDefault "")
+            renderVarTag tag ind
 
         Not ->
             "¬"

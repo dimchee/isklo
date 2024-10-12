@@ -1,4 +1,4 @@
-module Language exposing (Expr(..), ExprTag(..), ParsingResult(..), VarTag(..), parse)
+module Language exposing (Expr(..), ExprTag(..), ParsingResult(..), VarTag(..), parse, vars)
 
 import Parser as P exposing ((|.), (|=), Parser)
 
@@ -15,6 +15,15 @@ type Expr
     | BracketError ExprTag Expr Expr
 
 
+vars : Expr -> List VarData
+vars e = case e of 
+    Nullary t -> case t of 
+        Var tag index -> [ { tag = tag, index = index } ]
+        _ -> []
+    Unary _ child -> vars child
+    Binary _ l r -> vars l ++ vars r
+    _ -> []
+
 type ParsingResult
     = LongInput Expr
     | Parsed Expr
@@ -26,6 +35,7 @@ type VarTag
     | R
     | S
 
+type alias VarData = { tag: VarTag, index: Maybe Int }
 
 type ExprTag
     = Var VarTag (Maybe Int)
