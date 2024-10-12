@@ -35,7 +35,8 @@ jobs:
         run: rustup target add wasm32-unknown-unknown
       - name: Install wasm-bindgen
         uses: jetli/wasm-bindgen-action@v0.2.0
-        version: '0.2.95'
+        with:
+          version: '0.2.95'
       - name: Install Node
         uses: actions/setup-node@v3
       - name: Install elm
