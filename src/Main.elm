@@ -6,7 +6,8 @@ import Browser
 import Html exposing (Html)
 import Html.Attributes as HA
 import Html.Events as HE
-import Language
+import Language exposing (Expr(..))
+import List.Extra
 import TreeDraw
 
 
@@ -32,7 +33,7 @@ type Msg
 main : Program () Model Msg
 main =
     Browser.element
-        { init = always ( { draft = "", expr = "", messages = [] }, Cmd.none )
+        { init = always ( { draft = "", expr = "((p \\land q) \\Rightarrow (q \\land p))", messages = [] }, Cmd.none )
         , view = view
         , update = update
         , subscriptions = \_ -> Sub.none -- \_ -> messageReceiver Recv
@@ -56,29 +57,122 @@ update msg model =
             ( model, Cmd.none )
 
 
+type alias VarData =
+    { tag : Language.VarTag, index : Maybe Int }
+
+
+type alias Valuation =
+    List ( VarData, Bool )
+
+
+vars : Language.Expr -> List VarData
+vars e =
+    case e of
+        Language.Nullary t ->
+            case t of
+                Language.Var tag index ->
+                    [ { tag = tag, index = index } ]
+
+                _ ->
+                    []
+
+        Language.Unary _ child ->
+            vars child
+
+        Language.Binary _ l r ->
+            List.Extra.unique <| vars l ++ vars r
+
+        _ ->
+            []
+
+
+subExprs : Language.Expr -> List Language.Expr
+subExprs e =
+    case e of
+        Language.Nullary _ ->
+            [ e ]
+
+        Language.Unary _ child ->
+            e :: subExprs child
+
+        Language.Binary _ l r ->
+            e :: subExprs l ++ subExprs r
+
+        _ ->
+            []
+
+
+interpret : Valuation -> Language.Expr -> Maybe Bool
+interpret vs e =
+    case e of
+        Language.Nullary Language.T ->
+            Just True
+
+        Language.Nullary Language.F ->
+            Just False
+
+        Language.Nullary (Language.Var tag index) ->
+            List.Extra.find (\( var, _ ) -> var.tag == tag && var.index == index) vs
+                |> Maybe.map Tuple.second
+
+        Language.Unary Language.Not child ->
+            interpret vs child |> Maybe.map not
+
+        Language.Binary Language.And l r ->
+            Maybe.map2 (&&) (interpret vs l) (interpret vs r)
+
+        Language.Binary Language.Or l r ->
+            Maybe.map2 (||) (interpret vs l) (interpret vs r)
+
+        Language.Binary Language.Impl l r ->
+            Maybe.map2 (||) (interpret vs l) (Maybe.map not <| interpret vs r)
+
+        Language.Binary Language.Iff l r ->
+            Maybe.map2 (==) (interpret vs l) (interpret vs r)
+
+        _ ->
+            Nothing
+
+
 viewTable : Language.Expr -> Html Msg
 viewTable expr =
     let
-        vars =
-            Language.vars expr
+        valuations =
+            vars expr
+                |> List.map (\var -> [ ( var, True ), ( var, False ) ])
+                |> List.Extra.cartesianProduct
 
-        allCombs l =
-            case l of
-                _ :: xs ->
-                    List.concatMap (\ys -> [ Language.T :: ys, Language.F :: ys ]) <| allCombs xs
+        sExprs =
+            subExprs expr |> List.Extra.unique |> List.sortBy Language.depth
 
-                [] ->
-                    [ [] ]
+        viewTruth mx =
+            case mx of
+                Just True ->
+                    "⊤"
 
-        viewValues =
-            allCombs vars |> List.map (Html.tr [] << List.map (\x -> Html.th [] [ Html.text <| TreeDraw.renderTag x ]))
+                Just False ->
+                    "⊥"
+
+                Nothing ->
+                    "✖"
+
+        style =
+            [ HA.style "border" "1px solid black"
+            , HA.style "border-collapse" "collapse"
+            , HA.style "text-align" "center"
+            , HA.style "padding" "5px"
+            ]
+
+        viewValuation val =
+            sExprs
+                |> List.map (interpret val >> viewTruth >> Html.text >> List.singleton >> Html.td style)
+                |> Html.tr style
     in
-    Html.table [] <|
-        (vars
-            |> List.map (\v -> Html.th [] [ Html.text <| TreeDraw.renderVarTag v.tag v.index ])
-            |> Html.tr []
-        )
-            :: viewValues
+    sExprs
+        |> List.map (Language.renderExpr >> Html.text >> List.singleton >> Html.th style)
+        |> Html.tr []
+        |> (\l -> l :: List.map viewValuation valuations)
+        |> Html.table style
 
 
 view : Model -> Html Msg

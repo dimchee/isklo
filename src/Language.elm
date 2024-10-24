@@ -1,4 +1,13 @@
-module Language exposing (Expr(..), ExprTag(..), ParsingResult(..), VarTag(..), parse, vars)
+module Language exposing
+    ( Expr(..)
+    , ExprTag(..)
+    , ParsingResult(..)
+    , VarTag(..)
+    , parse
+    , renderExpr
+    , renderTag
+    , renderVarTag, depth
+    )
 
 import Parser as P exposing ((|.), (|=), Parser)
 
@@ -15,15 +24,6 @@ type Expr
     | BracketError ExprTag Expr Expr
 
 
-vars : Expr -> List VarData
-vars e = case e of 
-    Nullary t -> case t of 
-        Var tag index -> [ { tag = tag, index = index } ]
-        _ -> []
-    Unary _ child -> vars child
-    Binary _ l r -> vars l ++ vars r
-    _ -> []
-
 type ParsingResult
     = LongInput Expr
     | Parsed Expr
@@ -35,7 +35,6 @@ type VarTag
     | R
     | S
 
-type alias VarData = { tag: VarTag, index: Maybe Int }
 
 type ExprTag
     = Var VarTag (Maybe Int)
@@ -137,3 +136,86 @@ expr =
         , variable
         , P.succeed NodeError |. P.chompWhile (always True)
         ]
+
+
+renderExpr : Expr -> String
+renderExpr e =
+    case e of
+        Nullary tag ->
+            renderTag tag
+
+        Unary tag child ->
+            renderTag tag ++ renderExpr child
+
+        Binary tag l r ->
+            "(" ++ renderExpr l ++ renderTag tag ++ renderExpr r ++ ")"
+
+        _ ->
+            "Error"
+
+
+renderVarTag : VarTag -> Maybe Int -> String
+renderVarTag tag ind =
+    let
+        str =
+            case tag of
+                P ->
+                    "p"
+
+                Q ->
+                    "q"
+
+                R ->
+                    "r"
+
+                S ->
+                    "s"
+
+        digits n =
+            if n == 0 then
+                []
+
+            else
+                Basics.modBy 10 n :: digits (n // 10)
+
+        getInd n =
+            digits n |> List.reverse |> List.map (\d -> Char.fromCode (Char.toCode '₀' + d)) |> String.fromList
+    in
+    str ++ (Maybe.map getInd ind |> Maybe.withDefault "")
+
+
+renderTag : ExprTag -> String
+renderTag e =
+    case e of
+        T ->
+            "⊤"
+
+        F ->
+            "⊥"
+
+        Var tag ind ->
+            renderVarTag tag ind
+
+        Not ->
+            "¬"
+
+        And ->
+            "∧"
+
+        Or ->
+            "∨"
+
+        Impl ->
+            "⇒"
+
+        Iff ->
+            "⇔"
+
+
+depth : Expr -> Int
+depth e = case e of
+    Nullary _ -> 1
+    Unary _ child -> 1 +depth child
+    Binary _ l r -> 1 + max (depth l) (depth r)
+    _ -> 0
+

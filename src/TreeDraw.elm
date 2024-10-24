@@ -1,4 +1,4 @@
-module TreeDraw exposing (viewExpr, renderVarTag, renderTag)
+module TreeDraw exposing (viewExpr)
 
 import Html exposing (Html)
 import Language exposing (..)
@@ -30,7 +30,7 @@ viewExpr e =
             Maybe.withDefault 0
 
         ri =
-            renderExpr config.nodeR e
+            treeRenderExpr config.nodeR e
 
         l =
             List.minimum ri.contour.left |> unMaybe
@@ -87,8 +87,8 @@ drawTree nodeR posx posy ri =
     List.concatMap drawChild (getChildren ri.children) ++ drawNode ri.label |> Svg.g [ translate posx posy ]
 
 
-renderExpr : Float -> Expr -> TreeRenderInfo
-renderExpr nodeR e =
+treeRenderExpr : Float -> Expr -> TreeRenderInfo
+treeRenderExpr nodeR e =
     let
         extend fst xs ys =
             fst :: (xs ++ List.drop (List.length xs) ys)
@@ -138,13 +138,13 @@ renderExpr nodeR e =
     in
     case e of
         Nullary tag ->
-            renderInfo (renderTag tag) [] { left = [], right = [] }
+            renderInfo (Language.renderTag tag) [] { left = [], right = [] }
 
         Unary tag child ->
-            renderUnary (renderTag tag) <| renderExpr nodeR child
+            renderUnary (renderTag tag) <| treeRenderExpr nodeR child
 
         Binary tag lChild rChild ->
-            renderBinary (renderTag tag) (renderExpr nodeR lChild) (renderExpr nodeR rChild)
+            renderBinary (renderTag tag) (treeRenderExpr nodeR lChild) (treeRenderExpr nodeR rChild)
 
         Impossible ->
             renderInfo "Impossible" [] { left = [], right = [] }
@@ -153,71 +153,13 @@ renderExpr nodeR e =
             renderInfo "✖" [] { left = [], right = [] }
 
         LeftExprError l ->
-            renderBinErr "" <| renderExpr nodeR l
+            renderBinErr "" <| treeRenderExpr nodeR l
 
         BinTagError l ->
-            renderBinErr "✖" <| renderExpr nodeR l
+            renderBinErr "✖" <| treeRenderExpr nodeR l
 
         RightExprError tag l r ->
-            renderBinary (renderTag tag) (renderExpr nodeR l) (renderExpr nodeR r)
+            renderBinary (renderTag tag) (treeRenderExpr nodeR l) (treeRenderExpr nodeR r)
 
         BracketError tag l r ->
-            renderBinary (renderTag tag ++ "✖") (renderExpr nodeR l) (renderExpr nodeR r)
-
-
-renderVarTag : VarTag -> Maybe Int -> String
-renderVarTag tag ind =
-    let
-        str =
-            case tag of
-                Language.P ->
-                    "p"
-
-                Language.Q ->
-                    "q"
-
-                Language.R ->
-                    "r"
-
-                Language.S ->
-                    "s"
-
-        digits n =
-            if n == 0 then
-                []
-
-            else
-                Basics.modBy 10 n :: digits (n // 10)
-
-        getInd n =
-            digits n |> List.reverse |> List.map (\d -> Char.fromCode (Char.toCode '₀' + d)) |> String.fromList
-    in
-    str ++ (Maybe.map getInd ind |> Maybe.withDefault "")
-
-
-renderTag : ExprTag -> String
-renderTag e =
-    case e of
-        T ->
-            "⊤"
-
-        F ->
-            "⊥"
-
-        Var tag ind ->
-            renderVarTag tag ind
-
-        Not ->
-            "¬"
-
-        And ->
-            "∧"
-
-        Or ->
-            "∨"
-
-        Impl ->
-            "⇒"
-
-        Iff ->
-            "⇔"
+            renderBinary (renderTag tag ++ "✖") (treeRenderExpr nodeR l) (treeRenderExpr nodeR r)
