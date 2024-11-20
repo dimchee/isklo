@@ -1,4 +1,5 @@
 use egg::*;
+use serde::{Deserialize, Serialize};
 use wasm_bindgen::prelude::*;
 
 define_language! {
@@ -10,34 +11,71 @@ define_language! {
     }
 }
 
-fn make_rules() -> Vec<Rewrite<SimpleLanguage, ()>> {
-    vec![
-        rewrite!("commute-add"; "(+ ?a ?b)" => "(+ ?b ?a)"),
-        rewrite!("commute-mul"; "(* ?a ?b)" => "(* ?b ?a)"),
-        rewrite!("add-0"; "(+ ?a 0)" => "?a"),
-        rewrite!("mul-0"; "(* ?a 0)" => "0"),
-        rewrite!("mul-1"; "(* ?a 1)" => "?a"),
-    ]
+#[derive(Serialize, Deserialize)]
+struct Rule {
+    name: String,
+    searcher: String,
+    applier: String,
 }
 
 #[wasm_bindgen]
-pub fn simplify(s: &str) -> String {
-    let expr = s.parse::<RecExpr<SimpleLanguage>>();
-    match expr {
-        Ok(expr) => {
-        let runner = Runner::default().with_expr(&expr).run(&make_rules());
-        let root = runner.roots[0];
+pub fn simplify(rules: Vec<JsValue>, s: &str) -> String {
+    let rules = rules
+        .iter()
+        .flat_map(|x| serde_wasm_bindgen::from_value::<Rule>(x.clone()).ok())
+        .collect::<Vec<_>>();
+    simplify_core(&rules, s)
+}
 
-        let extractor = Extractor::new(&runner.egraph, AstSize);
-        let (best_cost, best) = extractor.find_best(root);
-        println!("Simplified {} to {} with cost {}", expr, best, best_cost);
-        best.to_string()
-        },
-        _ => "Parsing error".to_owned()
+fn simplify_core(rules: &Vec<Rule>, s: &str) -> String {
+    let expr = s.parse::<RecExpr<SymbolLang>>();
+    let rules = rules
+        .iter()
+        .flat_map(|rule| {
+            let searcher = rule.searcher.parse::<Pattern<SymbolLang>>().ok()?;
+            let applier = rule.applier.parse::<Pattern<SymbolLang>>().ok()?;
+            Some(Rewrite::new(rule.name.clone(), searcher, applier))
+        })
+        .flatten()
+        .collect::<Vec<Rewrite<SymbolLang, ()>>>();
+    match expr {
+        Ok(expr) => simplify_egg(rules, expr),
+        _ => "Parsing error".to_owned(),
     }
 }
+
+fn simplify_egg(rules: Vec<Rewrite<SymbolLang, ()>>, expr: RecExpr<SymbolLang>) -> String {
+    let runner = Runner::default()
+        .with_explanations_enabled()
+        .with_expr(&expr)
+        .run(&rules);
+    let root = runner.roots[0];
+
+    let extractor = Extractor::new(&runner.egraph, AstSize);
+    let (best_cost, best) = extractor.find_best(root);
+    println!("Simplified {} to {} with cost {}", expr, best, best_cost);
+    best.to_string()
+}
+
 #[test]
 fn simple_tests() {
-    assert_eq!(simplify("(* 0 42)"), "0");
-    assert_eq!(simplify("(+ 0 (* 1 foo))"), "foo");
+    let rules = vec![
+        Rule {
+            name: "mul_zero".to_owned(),
+            searcher: "(* 0 ?a)".to_owned(),
+            applier: "0".to_owned(),
+        },
+        Rule {
+            name: "add_zero".to_owned(),
+            searcher: "(+ 0 ?a)".to_owned(),
+            applier: "?a".to_owned(),
+        },
+        Rule {
+            name: "mul_one".to_owned(),
+            searcher: "(* 1 ?a)".to_owned(),
+            applier: "?a".to_owned(),
+        },
+    ];
+    assert_eq!(simplify_core(&rules, "(* 0 42)"), "0");
+    assert_eq!(simplify_core(&rules, "(+ 0 (* 1 foo))"), "foo");
 }

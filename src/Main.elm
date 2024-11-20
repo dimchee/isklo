@@ -7,15 +7,60 @@ import Html exposing (Html)
 import Html.Attributes as HA
 import Html.Events as HE
 import Language exposing (Expr(..))
-import List.Extra
+import Table
 import TreeDraw
 
 
 port messageReceiver : (String -> msg) -> Sub msg
 
 
-port sendMessage : String -> Cmd msg
+port sendMessage : ( List Rule, String ) -> Cmd msg
 
+
+type alias Rule =
+    { name : String
+    , searcher : String
+    , applier : String
+    }
+
+arithmeticRules : List Rule
+arithmeticRules =
+    [ { name = "commute-add", searcher = "(+ ?a ?b)", applier = "(+ ?b ?a)" }
+    , { name = "commute-mul", searcher = "(* ?a ?b)", applier = "(* ?b ?a)" }
+    , { name = "add-0", searcher = "(+ ?a 0)", applier = "?a" }
+    , { name = "mul-0", searcher = "(* ?a 0)", applier = "0" }
+    , { name = "mul-1", searcher = "(* ?a 1)", applier = "?a" }
+    , { name = "lnot", searcher = "(¬ ⊤)", applier = "⊥" }
+    , { name = "lnot", searcher = "(¬ ⊥)", applier = "⊤" }
+    ]
+
+logicRules : List Rule
+logicRules =
+    [ { searcher = "(∧ ⊤ ?p)", applier = "?p", name = "top_land" }
+    , { searcher = "(∨ ⊤ ?p)", applier = "⊤", name = "top_lor" }
+    , { searcher = "(∧ ⊥ ?p)", applier = "⊥", name = "bot_land" }
+    , { searcher = "(∨ ⊥ ?p)", applier = "?p", name = "bot_lor" }
+    , { searcher = "(∨ ?p (¬ ?p))", applier = "⊤", name = "p_lor_lnot_p" }
+    , { searcher = "(¬ (¬ ?p))", applier = "?p", name = "lnot_lnot_p" }
+    , { searcher = "(⇒ (¬ ?q) (¬ ?p))", applier = "(⇒ ?p ?q)", name = "kontrapozicija" }
+    , { searcher = "(¬ (∧ ?p ?q))", applier = "(∨ (¬ ?p) (¬ ?q))", name = "demorgan_land" }
+    , { searcher = "(¬ (∨ ?p ?q))", applier = "(∧ (¬ ?p) (¬ ?q))", name = "demorgan_lor" }
+    , { searcher = "(⇒ ?p (⇒ ?q ?r))", applier = "(⇒ (∧ ?p ?q) ?r)", name = "curry" }
+    , { searcher = "(∧ ?p ?q)", applier = "(∧ ?q ?p)", name = "commut_land" }
+    , { searcher = "(∨ ?p ?q)", applier = "(∨ ?q ?p)", name = "commut_lor" }
+    , { searcher = "(⇔ ?p ?q)", applier = "(⇔ ?q ?p)", name = "commut_equiv" }
+    , { searcher = "(⇒ ?p ?q)", applier = "(∨ (¬ ?p) ?q)", name = "impl_def" }
+    , { searcher = "(⇔ ?p ?q)", applier = "(∧ (⇒ ?p ?q) (⇒ ?q ?p))", name = "iff_def" }
+    , { searcher = "(∨ ?p (∧ ?p ?q))", applier = "?p", name = "absorb_lor" }
+    , { searcher = "(∧ ?p (∨ ?p ?q))", applier = "?p", name = "absorb_land" }
+    , { searcher = "(∧ ?p ?p)", applier = "?p", name = "idemp_land" }
+    , { searcher = "(∨ ?p ?p)", applier = "?p", name = "idemp_lor" }
+    , { searcher = "(⇔ ?p ?p)", applier = "⊤", name = "p_equiv_p_top" }
+    , { searcher = "(∧ ?p (∧ ?q ?r))", applier = "(∧ (∧ ?p ?q) ?r)", name = "assoc_land" }
+    , { searcher = " (∨ ?p (∨ ?q ?r))", applier = "(∨ (∨ ?p ?q) ?r)", name = "assoc_lor" }
+    , { searcher = " (∨ (∧ ?p ?q) (∧ ?p ?r))", applier = "(∧ ?p (∨ ?q ?r))", name = "dist_land_lor" }
+    , { searcher = " (∧ (∨ ?p ?q) (∨ ?p ?r))", applier = "(∨?p (∧ ?q ?r))", name = "dist_lor_land" }
+    ]
 
 type alias Model =
     { draft : String
@@ -26,17 +71,26 @@ type alias Model =
 
 type Msg
     = ExprChanged String
+    | Send String
     | Recv String
     | NoOp
 
 
 main : Program () Model Msg
 main =
+    let
+        initExpr =
+            "((p \\land q) \\Rightarrow (q \\land p))"
+
+        initModel =
+            { draft = "", expr = initExpr, messages = [] }
+
+    in
     Browser.element
-        { init = always ( { draft = "", expr = "((p \\land q) \\Rightarrow (q \\land p))", messages = [] }, Cmd.none )
+        { init = always ( initModel, sendMessage ( logicRules, "(⇔ (∧ q p) (∧ p q))" ) )
         , view = view
         , update = update
-        , subscriptions = \_ -> Sub.none -- \_ -> messageReceiver Recv
+        , subscriptions = \_ -> messageReceiver Recv
         }
 
 
@@ -53,126 +107,13 @@ update msg model =
             , Cmd.none
             )
 
+        Send message ->
+            ( model
+            , sendMessage ( [], message )
+            )
+
         NoOp ->
             ( model, Cmd.none )
-
-
-type alias VarData =
-    { tag : Language.VarTag, index : Maybe Int }
-
-
-type alias Valuation =
-    List ( VarData, Bool )
-
-
-vars : Language.Expr -> List VarData
-vars e =
-    case e of
-        Language.Nullary t ->
-            case t of
-                Language.Var tag index ->
-                    [ { tag = tag, index = index } ]
-
-                _ ->
-                    []
-
-        Language.Unary _ child ->
-            vars child
-
-        Language.Binary _ l r ->
-            List.Extra.unique <| vars l ++ vars r
-
-        _ ->
-            []
-
-
-subExprs : Language.Expr -> List Language.Expr
-subExprs e =
-    case e of
-        Language.Nullary _ ->
-            [ e ]
-
-        Language.Unary _ child ->
-            e :: subExprs child
-
-        Language.Binary _ l r ->
-            e :: subExprs l ++ subExprs r
-
-        _ ->
-            []
-
-
-interpret : Valuation -> Language.Expr -> Maybe Bool
-interpret vs e =
-    case e of
-        Language.Nullary Language.T ->
-            Just True
-
-        Language.Nullary Language.F ->
-            Just False
-
-        Language.Nullary (Language.Var tag index) ->
-            List.Extra.find (\( var, _ ) -> var.tag == tag && var.index == index) vs
-                |> Maybe.map Tuple.second
-
-        Language.Unary Language.Not child ->
-            interpret vs child |> Maybe.map not
-
-        Language.Binary Language.And l r ->
-            Maybe.map2 (&&) (interpret vs l) (interpret vs r)
-
-        Language.Binary Language.Or l r ->
-            Maybe.map2 (||) (interpret vs l) (interpret vs r)
-
-        Language.Binary Language.Impl l r ->
-            Maybe.map2 (||) (interpret vs l) (Maybe.map not <| interpret vs r)
-
-        Language.Binary Language.Iff l r ->
-            Maybe.map2 (==) (interpret vs l) (interpret vs r)
-
-        _ ->
-            Nothing
-
-
-viewTable : Language.Expr -> Html Msg
-viewTable expr =
-    let
-        valuations =
-            vars expr
-                |> List.map (\var -> [ ( var, True ), ( var, False ) ])
-                |> List.Extra.cartesianProduct
-
-        sExprs =
-            subExprs expr |> List.Extra.unique |> List.sortBy Language.depth
-
-        viewTruth mx =
-            case mx of
-                Just True ->
-                    "⊤"
-
-                Just False ->
-                    "⊥"
-
-                Nothing ->
-                    "✖"
-
-        style =
-            [ HA.style "border" "1px solid black"
-            , HA.style "border-collapse" "collapse"
-            , HA.style "text-align" "center"
-            , HA.style "padding" "5px"
-            ]
-
-        viewValuation val =
-            sExprs
-                |> List.map (interpret val >> viewTruth >> Html.text >> List.singleton >> Html.td style)
-                |> Html.tr style
-    in
-    sExprs
-        |> List.map (Language.renderExpr >> Html.text >> List.singleton >> Html.th style)
-        |> Html.tr []
-        |> (\l -> l :: List.map viewValuation valuations)
-        |> Html.table style
 
 
 view : Model -> Html Msg
@@ -185,11 +126,12 @@ view model =
             , HA.value model.expr
             ]
             []
+        , Html.button [ HE.onClick <| Send model.expr ] [ Html.text "Send" ]
         , Html.div [] <|
             case Language.parse model.expr of
                 Ok (Language.Parsed e) ->
                     [ TreeDraw.viewExpr e |> Html.map (always NoOp)
-                    , viewTable e
+                    , Table.view e
                     ]
 
                 Ok (Language.LongInput e) ->
@@ -197,4 +139,12 @@ view model =
 
                 Err e ->
                     [ Html.text <| Debug.toString e ]
+        , Html.div [] <|
+            Html.h1 [] [ Html.text "Messages: " ]
+                :: List.map
+                    (Html.div []
+                        << List.singleton
+                        << Html.text
+                    )
+                    model.messages
         ]

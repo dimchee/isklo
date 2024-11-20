@@ -19,7 +19,7 @@
     in
     {
       devShells.${system}.default = pkgs.mkShell {
-        buildInputs = [ run genWasm pkgs.cargo pkgs.lld pkgs.wasm-bindgen-cli pkgs.taplo pkgs.rust-analyzer] ++
+        buildInputs = [ pkgs.chromium run genWasm pkgs.cargo pkgs.lld pkgs.wasm-bindgen-cli pkgs.taplo pkgs.rust-analyzer pkgs.rustfmt ] ++
           (with pkgs.elmPackages; [ elm elm-live elm-language-server elm-format ]);
       };
     };
