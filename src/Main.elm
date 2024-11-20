@@ -7,11 +7,12 @@ import Html exposing (Html)
 import Html.Attributes as HA
 import Html.Events as HE
 import Language exposing (Expr(..))
+import RecExpr
 import Table
 import TreeDraw
 
 
-port messageReceiver : (String -> msg) -> Sub msg
+port messageReceiver : (List String -> msg) -> Sub msg
 
 
 port sendMessage : ( List Rule, String ) -> Cmd msg
@@ -23,6 +24,7 @@ type alias Rule =
     , applier : String
     }
 
+
 arithmeticRules : List Rule
 arithmeticRules =
     [ { name = "commute-add", searcher = "(+ ?a ?b)", applier = "(+ ?b ?a)" }
@@ -33,6 +35,7 @@ arithmeticRules =
     , { name = "lnot", searcher = "(¬ ⊤)", applier = "⊥" }
     , { name = "lnot", searcher = "(¬ ⊥)", applier = "⊤" }
     ]
+
 
 logicRules : List Rule
 logicRules =
@@ -62,6 +65,7 @@ logicRules =
     , { searcher = " (∧ (∨ ?p ?q) (∨ ?p ?r))", applier = "(∨?p (∧ ?q ?r))", name = "dist_lor_land" }
     ]
 
+
 type alias Model =
     { draft : String
     , messages : List String
@@ -72,7 +76,7 @@ type alias Model =
 type Msg
     = ExprChanged String
     | Send String
-    | Recv String
+    | Recv (List String)
     | NoOp
 
 
@@ -84,7 +88,6 @@ main =
 
         initModel =
             { draft = "", expr = initExpr, messages = [] }
-
     in
     Browser.element
         { init = always ( initModel, sendMessage ( logicRules, "(⇔ (∧ q p) (∧ p q))" ) )
@@ -102,8 +105,8 @@ update msg model =
             , Cmd.none
             )
 
-        Recv message ->
-            ( { model | messages = model.messages ++ [ message ] }
+        Recv messages ->
+            ( { model | messages = model.messages ++ messages }
             , Cmd.none
             )
 
@@ -145,6 +148,9 @@ view model =
                     (Html.div []
                         << List.singleton
                         << Html.text
+                        << Debug.toString
+                        << Result.map RecExpr.print
+                        << RecExpr.parse
                     )
                     model.messages
         ]

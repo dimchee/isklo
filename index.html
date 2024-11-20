@@ -11,7 +11,7 @@
   <div id="isklo"></div>
 </body>
 <script type="module">
-  import init, { simplify } from './www/wasm.js';
+  import init, { simplify, explain } from './www/wasm.js';
   (async () => {
     await init({});
     var app = Elm.Main.init({
@@ -19,11 +19,10 @@
     });
     app.ports.sendMessage.subscribe(function(input) {
       try {
-        app.ports.messageReceiver.send(simplify(input[0], input[1]));
+        app.ports.messageReceiver.send(explain(input[0], input[1]));
       } catch (e) {
         app.ports.messageReceiver.send(e.toString());
       }
-      // app.ports.messageReceiver.send(simplify(message));
     });
   })();
 </script>
