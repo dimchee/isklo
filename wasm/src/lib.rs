@@ -71,6 +71,7 @@ fn explain_core(rules: &Vec<Rule>, s: &str) -> Vec<String> {
 
 fn explain_egg(rules: Vec<Rewrite<SymbolLang, ()>>, expr: RecExpr<SymbolLang>) -> Vec<String> {
     let mut runner = Runner::default()
+        .with_node_limit(5000)
         .with_explanations_enabled()
         .with_expr(&expr)
         .run(&rules);

@@ -37,11 +37,16 @@ expr =
                 (P.chompWhile (\c -> c /= '(' && c /= ')' && c /= ' '))
         ]
 
-print : Expr -> String
+print : Expr -> (String, List String)
 print e = case e of
-    Ls [Tag "Rewrite<=", name, x] -> print x
-    Ls [Tag "Rewrite=>", name, x] -> print x
-    Ls [Tag op, x, y] -> "(" ++ print x ++ op ++ print y ++ ")"
-    Ls [Tag op, x] -> op ++ print x
-    Tag s -> s
-    _ -> "Todo"
+    Ls [Tag "Rewrite<=", Tag name, x] -> Tuple.mapSecond ((::) name) <| print x
+    Ls [Tag "Rewrite=>", Tag name, x] -> Tuple.mapSecond ((::) name) <| print x
+    Ls [Tag op, x, y] -> 
+        let 
+            (px, xs) = print x
+            (py, ys) = print y
+        in
+        ("(" ++ px ++ op ++ py ++ ")", xs ++ ys)
+    Ls [Tag op, x] -> Tuple.mapFirst (\a -> op ++ a) <| print x
+    Tag s -> (s, [])
+    _ -> ("Todo", [])

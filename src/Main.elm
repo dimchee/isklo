@@ -3,7 +3,7 @@ port module Main exposing (..)
 -- reingold tilford '81
 
 import Browser
-import Html exposing (Html)
+import Html exposing (Html, s)
 import Html.Attributes as HA
 import Html.Events as HE
 import Language exposing (Expr(..))
@@ -62,7 +62,7 @@ logicRules =
     , { searcher = "(∧ ?p (∧ ?q ?r))", applier = "(∧ (∧ ?p ?q) ?r)", name = "assoc_land" }
     , { searcher = " (∨ ?p (∨ ?q ?r))", applier = "(∨ (∨ ?p ?q) ?r)", name = "assoc_lor" }
     , { searcher = " (∨ (∧ ?p ?q) (∧ ?p ?r))", applier = "(∧ ?p (∨ ?q ?r))", name = "dist_land_lor" }
-    , { searcher = " (∧ (∨ ?p ?q) (∨ ?p ?r))", applier = "(∨?p (∧ ?q ?r))", name = "dist_lor_land" }
+    , { searcher = " (∧ (∨ ?p ?q) (∨ ?p ?r))", applier = "(∨ ?p (∧ ?q ?r))", name = "dist_lor_land" }
     ]
 
 
@@ -80,6 +80,11 @@ type Msg
     | NoOp
 
 
+revRule : Rule -> Rule
+revRule { searcher, applier, name } =
+    { searcher = applier, applier = searcher, name = name }
+
+
 main : Program () Model Msg
 main =
     let
@@ -90,7 +95,17 @@ main =
             { draft = "", expr = initExpr, messages = [] }
     in
     Browser.element
-        { init = always ( initModel, sendMessage ( logicRules, "(⇔ (∧ q p) (∧ p q))" ) )
+        { init =
+            always
+                ( initModel
+                , sendMessage
+                    ( logicRules ++ List.map revRule logicRules
+                      -- , "(⇔ (∧ q p) (∧ p q))"
+                      -- , "(⇒ (∧ (⇒ p q) (⇒ q r)) (⇒ p r))"
+                      -- , "(⇒ p p)"
+                    , "(⇒ p (∨ p q))"
+                    )
+                )
         , view = view
         , update = update
         , subscriptions = \_ -> messageReceiver Recv
@@ -119,6 +134,18 @@ update msg model =
             ( model, Cmd.none )
 
 
+viewExplanation : ( String, List String ) -> Html Msg
+viewExplanation ( s, ss ) =
+    Html.div
+        [ HA.style "display" "flex"
+        , HA.style "flex-direction" "row"
+        , HA.style "justify-content" "space-between"
+        ]
+        [ Html.text s
+        , Html.div [] <| List.map Html.text ss
+        ]
+
+
 view : Model -> Html Msg
 view model =
     Html.ul []
@@ -145,11 +172,10 @@ view model =
         , Html.div [] <|
             Html.h1 [] [ Html.text "Messages: " ]
                 :: List.map
-                    (Html.div []
-                        << List.singleton
-                        << Html.text
-                        << Debug.toString
-                        << Result.map RecExpr.print
+                    (viewExplanation
+                        << RecExpr.print
+                        << Maybe.withDefault (RecExpr.Tag "ERROR")
+                        << Result.toMaybe
                         << RecExpr.parse
                     )
                     model.messages
