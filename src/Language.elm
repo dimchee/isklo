@@ -2,13 +2,14 @@ module Language exposing
     ( Expr(..)
     , ExprTag(..)
     , ParsingResult(..)
-    , VarTag(..)
+    , depth
     , parse
     , renderExpr
     , renderTag
-    , renderVarTag, depth
+    , renderVarTag
     )
 
+import Dict as D
 import Parser as P exposing ((|.), (|=), Parser)
 
 
@@ -29,22 +30,14 @@ type ParsingResult
     | Parsed Expr
 
 
-type VarTag
-    = P
-    | Q
-    | R
-    | S
+varTags : List String
+varTags =
+    [ "p", "q", "r", "s" ]
 
 
 type ExprTag
-    = Var VarTag (Maybe Int)
-    | T
-    | F
-    | Not
-    | And
-    | Or
-    | Impl
-    | Iff
+    = Var String (Maybe Int)
+    | Op String
 
 
 parse : String -> Result (List P.DeadEnd) ParsingResult
@@ -91,12 +84,7 @@ variable =
                 _ ->
                     NodeError
         )
-        |= P.oneOf
-            [ P.succeed P |. P.symbol "p"
-            , P.succeed Q |. P.symbol "q"
-            , P.succeed R |. P.symbol "r"
-            , P.succeed S |. P.symbol "s"
-            ]
+        |= P.oneOf (List.map (P.getChompedString << P.symbol) varTags)
         |= P.oneOf
             [ P.succeed Just
                 |. P.symbol "_"
@@ -108,12 +96,25 @@ variable =
             ]
 
 
+texToUnicode : D.Dict String String
+texToUnicode =
+    D.fromList
+        [ ( "⊤", "\\top" )
+        , ( "⊥", "\\bot" )
+        , ( "¬", "\\lnot" )
+        , ( "∧", "\\land" )
+        , ( "∨", "\\lor" )
+        , ( "⇒", "\\Rightarrow" )
+        , ( "⇔", "\\Leftrightarrow" )
+        ]
+
+
 expr : Parser Expr
 expr =
     P.oneOf
-        [ P.succeed (Nullary T) |. P.symbol "\\top"
-        , P.succeed (Nullary F) |. P.symbol "\\bot"
-        , P.succeed (Unary Not)
+        [ P.succeed (Nullary <| Op "⊤") |. P.symbol "\\top"
+        , P.succeed (Nullary <| Op "⊥") |. P.symbol "\\bot"
+        , P.succeed (Unary <| Op "¬")
             |. P.symbol "\\lnot"
             |. P.spaces
             |= P.lazy (\_ -> expr)
@@ -123,10 +124,10 @@ expr =
             |= P.lazy (\_ -> expr)
             |. P.spaces
             |= P.oneOf
-                [ P.succeed (Just And) |. P.symbol "\\land"
-                , P.succeed (Just Or) |. P.symbol "\\lor"
-                , P.succeed (Just Impl) |. P.symbol "\\Rightarrow"
-                , P.succeed (Just Iff) |. P.symbol "\\Leftrightarrow"
+                [ P.succeed (Just <| Op "∧") |. P.symbol "\\land"
+                , P.succeed (Just <| Op "∨") |. P.symbol "\\lor"
+                , P.succeed (Just <| Op "⇒") |. P.symbol "\\Rightarrow"
+                , P.succeed (Just <| Op "⇔") |. P.symbol "\\Leftrightarrow"
                 , P.succeed Nothing |. P.chompWhile (always True)
                 ]
             |. P.spaces
@@ -154,23 +155,9 @@ renderExpr e =
             "Error"
 
 
-renderVarTag : VarTag -> Maybe Int -> String
+renderVarTag : String -> Maybe Int -> String
 renderVarTag tag ind =
     let
-        str =
-            case tag of
-                P ->
-                    "p"
-
-                Q ->
-                    "q"
-
-                R ->
-                    "r"
-
-                S ->
-                    "s"
-
         digits n =
             if n == 0 then
                 []
@@ -181,41 +168,30 @@ renderVarTag tag ind =
         getInd n =
             digits n |> List.reverse |> List.map (\d -> Char.fromCode (Char.toCode '₀' + d)) |> String.fromList
     in
-    str ++ (Maybe.map getInd ind |> Maybe.withDefault "")
+    tag ++ (Maybe.map getInd ind |> Maybe.withDefault "")
 
 
 renderTag : ExprTag -> String
 renderTag e =
     case e of
-        T ->
-            "⊤"
-
-        F ->
-            "⊥"
-
         Var tag ind ->
             renderVarTag tag ind
 
-        Not ->
-            "¬"
-
-        And ->
-            "∧"
-
-        Or ->
-            "∨"
-
-        Impl ->
-            "⇒"
-
-        Iff ->
-            "⇔"
+        Op tag ->
+            tag
 
 
 depth : Expr -> Int
-depth e = case e of
-    Nullary _ -> 1
-    Unary _ child -> 1 +depth child
-    Binary _ l r -> 1 + max (depth l) (depth r)
-    _ -> 0
+depth e =
+    case e of
+        Nullary _ ->
+            1
 
+        Unary _ child ->
+            1 + depth child
+
+        Binary _ l r ->
+            1 + max (depth l) (depth r)
+
+        _ ->
+            0

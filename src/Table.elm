@@ -7,7 +7,7 @@ import List.Extra
 
 
 type alias VarData =
-    { tag : Language.VarTag, index : Maybe Int }
+    { tag : String, index : Maybe Int }
 
 
 type alias Valuation =
@@ -17,29 +17,29 @@ type alias Valuation =
 interpret : Valuation -> Language.Expr -> Maybe Bool
 interpret vs e =
     case e of
-        Language.Nullary Language.T ->
+        Language.Nullary (Language.Op "⊤") ->
             Just True
 
-        Language.Nullary Language.F ->
+        Language.Nullary (Language.Op "⊥") ->
             Just False
 
         Language.Nullary (Language.Var tag index) ->
             List.Extra.find (\( var, _ ) -> var.tag == tag && var.index == index) vs
                 |> Maybe.map Tuple.second
 
-        Language.Unary Language.Not child ->
+        Language.Unary (Language.Op "¬") child ->
             interpret vs child |> Maybe.map not
 
-        Language.Binary Language.And l r ->
+        Language.Binary (Language.Op "∧") l r ->
             Maybe.map2 (&&) (interpret vs l) (interpret vs r)
 
-        Language.Binary Language.Or l r ->
+        Language.Binary (Language.Op "∨") l r ->
             Maybe.map2 (||) (interpret vs l) (interpret vs r)
 
-        Language.Binary Language.Impl l r ->
+        Language.Binary (Language.Op "⇒") l r ->
             Maybe.map2 (||) (interpret vs l) (Maybe.map not <| interpret vs r)
 
-        Language.Binary Language.Iff l r ->
+        Language.Binary (Language.Op "⇔") l r ->
             Maybe.map2 (==) (interpret vs l) (interpret vs r)
 
         _ ->
