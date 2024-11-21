@@ -33,6 +33,7 @@ jobs:
         uses: actions/configure-pages@v3
       - name: Add wasm target
         run: rustup target add wasm32-unknown-unknown
+      - uses: cachix/install-nix-action@v30
       - name: Install wasm-bindgen
         uses: jetli/wasm-bindgen-action@v0.2.0
         with:
@@ -45,9 +46,8 @@ jobs:
         run: mkdir www
       - name: Build wasm
         run: |
-          cd wasm
-          cargo build --target=wasm32-unknown-unknown --release
-          wasm-bindgen --target=web target/wasm32-unknown-unknown/release/wasm.wasm --out-dir ../www
+          nix develop
+          genWasm
       - name: Make Elm page
         run: elm make src/Main.elm --output www/elm.js
       - name: Upload artifact
