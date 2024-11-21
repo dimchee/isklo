@@ -6,7 +6,6 @@ module Language exposing
     , parse
     , renderExpr
     , renderTag
-    , renderVarTag
     )
 
 import Dict as D
@@ -50,26 +49,6 @@ parse =
         )
 
 
-makeBinary : Expr -> Maybe ExprTag -> Expr -> Bool -> Expr
-makeBinary e1 mtag e2 b =
-    case ( e1, mtag, e2 ) of
-        ( NodeError, _, _ ) ->
-            LeftExprError e1
-
-        ( _, Nothing, _ ) ->
-            BinTagError e1
-
-        ( _, Just tag, NodeError ) ->
-            RightExprError tag e1 e2
-
-        ( _, Just tag, _ ) ->
-            if b then
-                Binary tag e1 e2
-
-            else
-                BracketError tag e1 e2
-
-
 variable : Parser Expr
 variable =
     P.succeed
@@ -96,47 +75,97 @@ variable =
             ]
 
 
-texToUnicode : D.Dict String String
-texToUnicode =
-    D.fromList
-        [ ( "⊤", "\\top" )
-        , ( "⊥", "\\bot" )
-        , ( "¬", "\\lnot" )
-        , ( "∧", "\\land" )
+unicodeTexList : List ( Int, List ( String, String ) )
+unicodeTexList =
+    [ ( 0, [ ( "⊤", "\\top" ), ( "⊥", "\\bot" ) ] )
+    , ( 1, [ ( "¬", "\\lnot" ) ] )
+    , ( 2
+      , [ ( "∧", "\\land" )
         , ( "∨", "\\lor" )
         , ( "⇒", "\\Rightarrow" )
         , ( "⇔", "\\Leftrightarrow" )
         ]
+      )
+    ]
+
+
+unicodeToTex : String -> String
+unicodeToTex s =
+    unicodeTexList
+        |> List.map Tuple.second
+        |> List.foldr (++) []
+        |> D.fromList
+        |> D.get s
+        |> Maybe.withDefault "ERROR"
+
+
+texToUnicode : String -> String
+texToUnicode s =
+    unicodeTexList
+        |> List.map Tuple.second
+        |> List.foldr (++) []
+        |> List.map (\( x, y ) -> ( y, x ))
+        |> D.fromList
+        |> D.get s
+        |> Maybe.withDefault "ERROR"
+
+
+arity : Int -> List String
+arity i =
+    unicodeTexList
+        |> D.fromList
+        |> D.get i
+        |> Maybe.withDefault []
+        |> List.map Tuple.first
 
 
 expr : Parser Expr
 expr =
-    P.oneOf
-        [ P.succeed (Nullary <| Op "⊤") |. P.symbol "\\top"
-        , P.succeed (Nullary <| Op "⊥") |. P.symbol "\\bot"
-        , P.succeed (Unary <| Op "¬")
-            |. P.symbol "\\lnot"
-            |. P.spaces
-            |= P.lazy (\_ -> expr)
-        , P.succeed makeBinary
-            |. P.symbol "("
-            |. P.spaces
-            |= P.lazy (\_ -> expr)
-            |. P.spaces
-            |= P.oneOf
-                [ P.succeed (Just <| Op "∧") |. P.symbol "\\land"
-                , P.succeed (Just <| Op "∨") |. P.symbol "\\lor"
-                , P.succeed (Just <| Op "⇒") |. P.symbol "\\Rightarrow"
-                , P.succeed (Just <| Op "⇔") |. P.symbol "\\Leftrightarrow"
-                , P.succeed Nothing |. P.chompWhile (always True)
-                ]
-            |. P.spaces
-            |= P.lazy (\_ -> expr)
-            |. P.spaces
-            |= P.oneOf [ P.succeed True |. P.symbol ")", P.succeed False |. P.chompWhile (always True) ]
-        , variable
-        , P.succeed NodeError |. P.chompWhile (always True)
-        ]
+    let
+        makeBinary : Expr -> Maybe ExprTag -> Expr -> Bool -> Expr
+        makeBinary e1 mtag e2 b =
+            case ( e1, mtag, e2 ) of
+                ( NodeError, _, _ ) ->
+                    LeftExprError e1
+
+                ( _, Nothing, _ ) ->
+                    BinTagError e1
+
+                ( _, Just tag, NodeError ) ->
+                    RightExprError tag e1 e2
+
+                ( _, Just tag, _ ) ->
+                    if b then
+                        Binary tag e1 e2
+
+                    else
+                        BracketError tag e1 e2
+
+        func ar x =
+            P.succeed (ar <| Op x) |. P.symbol (unicodeToTex x)
+
+        -- arity 0
+        --     |> List.map
+    in
+    [ P.oneOf (arity 0 |> List.map (func Nullary))
+    , P.oneOf (arity 1 |> List.map (func Unary)) |. P.spaces |= P.lazy (\_ -> expr)
+    , P.succeed makeBinary
+        |. P.symbol "("
+        |. P.spaces
+        |= P.lazy (\_ -> expr)
+        |. P.spaces
+        |= P.oneOf
+            [ P.oneOf (arity 2 |> List.map (func Just))
+            , P.succeed Nothing |. P.chompWhile (always True)
+            ]
+        |. P.spaces
+        |= P.lazy (\_ -> expr)
+        |. P.spaces
+        |= P.oneOf [ P.succeed True |. P.symbol ")", P.succeed False |. P.chompWhile (always True) ]
+    , variable
+    , P.succeed NodeError |. P.chompWhile (always True)
+    ]
+        |> P.oneOf
 
 
 renderExpr : Expr -> String
@@ -155,8 +184,8 @@ renderExpr e =
             "Error"
 
 
-renderVarTag : String -> Maybe Int -> String
-renderVarTag tag ind =
+renderTag : ExprTag -> String
+renderTag e =
     let
         digits n =
             if n == 0 then
@@ -167,12 +196,10 @@ renderVarTag tag ind =
 
         getInd n =
             digits n |> List.reverse |> List.map (\d -> Char.fromCode (Char.toCode '₀' + d)) |> String.fromList
+
+        renderVarTag tag ind =
+            tag ++ (Maybe.map getInd ind |> Maybe.withDefault "")
     in
-    tag ++ (Maybe.map getInd ind |> Maybe.withDefault "")
-
-
-renderTag : ExprTag -> String
-renderTag e =
     case e of
         Var tag ind ->
             renderVarTag tag ind

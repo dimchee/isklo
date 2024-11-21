@@ -103,7 +103,7 @@ main =
                       -- , "(⇔ (∧ q p) (∧ p q))"
                       , "(⇒ (∧ (⇒ p q) (⇒ q r)) (⇒ p r))"
                       -- , "(⇒ p p)"
-                        -- , "(⇒ p (∨ p q))"
+                      --, "(⇒ p (∨ p q))"
                     )
                 )
         , view = view
@@ -140,6 +140,7 @@ viewExplanation ( s, ss ) =
         [ HA.style "display" "flex"
         , HA.style "flex-direction" "row"
         , HA.style "justify-content" "space-between"
+        , HA.style "width" "400px"
         ]
         [ Html.text s
         , Html.div [] <| List.map Html.text ss
