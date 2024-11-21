@@ -101,9 +101,9 @@ main =
                 , sendMessage
                     ( logicRules ++ List.map revRule logicRules
                       -- , "(⇔ (∧ q p) (∧ p q))"
-                      -- , "(⇒ (∧ (⇒ p q) (⇒ q r)) (⇒ p r))"
+                      , "(⇒ (∧ (⇒ p q) (⇒ q r)) (⇒ p r))"
                       -- , "(⇒ p p)"
-                    , "(⇒ p (∨ p q))"
+                        -- , "(⇒ p (∨ p q))"
                     )
                 )
         , view = view
