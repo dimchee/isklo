@@ -27,7 +27,7 @@
     {
       devShells.${system}.default = pkgs.mkShell {
         buildInputs = [
-          pkgs.chromium
+          # pkgs.chromium
           run
           genWasm
           pkgs.lld

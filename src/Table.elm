@@ -37,7 +37,7 @@ interpret vs e =
             Maybe.map2 (||) (interpret vs l) (interpret vs r)
 
         Language.Binary (Language.Op "⇒") l r ->
-            Maybe.map2 (||) (interpret vs l) (Maybe.map not <| interpret vs r)
+            Maybe.map2 (||) (Maybe.map not <| interpret vs l) (interpret vs r)
 
         Language.Binary (Language.Op "⇔") l r ->
             Maybe.map2 (==) (interpret vs l) (interpret vs r)

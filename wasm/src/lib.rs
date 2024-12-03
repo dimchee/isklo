@@ -35,6 +35,29 @@ pub fn explain(rules: Vec<JsValue>, s: &str) -> Vec<String> {
         .collect::<Vec<_>>();
     explain_core(&rules, s)
 }
+#[wasm_bindgen]
+pub fn egraph(rules: Vec<JsValue>, s: &str) -> JsValue {
+    let rules = rules
+        .iter()
+        .flat_map(|x| serde_wasm_bindgen::from_value::<Rule>(x.clone()).ok())
+        .flat_map(|rule| {
+            let searcher = rule.searcher.parse::<Pattern<SymbolLang>>().ok()?;
+            let applier = rule.applier.parse::<Pattern<SymbolLang>>().ok()?;
+            Some(Rewrite::new(rule.name.clone(), searcher, applier))
+        })
+        .flatten()
+        .collect::<Vec<Rewrite<SymbolLang, ()>>>();
+    if let Ok(expr) = s.parse::<RecExpr<SymbolLang>>() {
+        let runner = Runner::default()
+            .with_node_limit(100)
+            // .with_explanations_enabled()
+            .with_expr(&expr)
+            .run(&rules);
+        serde_wasm_bindgen::to_value(&runner.egraph).unwrap()
+    } else {
+        serde_wasm_bindgen::to_value(&()).unwrap()
+    }
+}
 
 fn simplify_core(rules: &Vec<Rule>, s: &str) -> String {
     let expr = s.parse::<RecExpr<SymbolLang>>();

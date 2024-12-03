@@ -11,7 +11,7 @@
   <div id="isklo"></div>
 </body>
 <script type="module">
-  import init, { simplify, explain } from './www/wasm.js';
+  import init, { simplify, explain, egraph } from './www/wasm.js';
   (async () => {
     await init({});
     var app = Elm.Main.init({
@@ -20,9 +20,20 @@
     app.ports.sendMessage.subscribe(function(input) {
       try {
         app.ports.messageReceiver.send(explain(input[0], input[1]));
+        // app.ports.messageReceiver.send([JSON.stringify(egraph(input[0], input[1]))]);
       } catch (e) {
         app.ports.messageReceiver.send(e.toString());
       }
+    });
+    const inputExpr = document.getElementById("input-expr");
+    addEventListener("selectionchange", (event) => {
+      app.ports.selectionChanged.send({ start: inputExpr.selectionStart, end: inputExpr.selectionEnd})
+    });
+    app.ports.changeSelection.subscribe(selection => {
+      requestAnimationFrame(() => {
+        inputExpr.selectionStart = selection.start; 
+        inputExpr.selectionEnd = selection.end;
+      });
     });
   })();
 </script>

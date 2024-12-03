@@ -36,7 +36,7 @@ viewExpr e =
             List.minimum ri.contour.left |> unMaybe
 
         width =
-            List.maximum ri.contour.right |> unMaybe |> (\x -> x - l + config.nodeR * 2 + 0.3)
+            List.maximum ri.contour.right |> unMaybe |> (\x -> x - l + config.nodeR * 2 + 0.6)
 
         depth x =
             List.map (Tuple.first >> depth) (getChildren x.children) |> List.maximum |> unMaybe |> (+) 1
@@ -163,3 +163,6 @@ treeRenderExpr nodeR e =
 
         BracketError tag l r ->
             renderBinary (renderTag tag ++ "✖") (treeRenderExpr nodeR l) (treeRenderExpr nodeR r)
+
+        LongInput child ->
+            renderUnary "Long" <| treeRenderExpr nodeR child

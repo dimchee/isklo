@@ -1,11 +1,11 @@
 module Language exposing
     ( Expr(..)
     , ExprTag(..)
-    , ParsingResult(..)
     , depth
     , parse
     , renderExpr
     , renderTag
+    , texToUnicode
     )
 
 import Dict as D
@@ -22,11 +22,8 @@ type Expr
     | BinTagError Expr
     | RightExprError ExprTag Expr Expr
     | BracketError ExprTag Expr Expr
+    | LongInput Expr
 
-
-type ParsingResult
-    = LongInput Expr
-    | Parsed Expr
 
 
 varTags : List String
@@ -39,13 +36,13 @@ type ExprTag
     | Op String
 
 
-parse : String -> Result (List P.DeadEnd) ParsingResult
+parse : String -> Result (List P.DeadEnd) Expr
 parse =
     P.run
         (P.succeed (\e f -> f e)
             |= expr
             |. P.spaces
-            |= P.oneOf [ P.succeed Parsed |. P.end, P.succeed LongInput ]
+            |= P.oneOf [ P.succeed identity |. P.end, P.succeed LongInput ]
         )
 
 
@@ -89,25 +86,12 @@ unicodeTexList =
     ]
 
 
-unicodeToTex : String -> String
-unicodeToTex s =
-    unicodeTexList
-        |> List.map Tuple.second
-        |> List.foldr (++) []
-        |> D.fromList
-        |> D.get s
-        |> Maybe.withDefault "ERROR"
-
-
 texToUnicode : String -> String
-texToUnicode s =
+texToUnicode =
     unicodeTexList
-        |> List.map Tuple.second
-        |> List.foldr (++) []
-        |> List.map (\( x, y ) -> ( y, x ))
-        |> D.fromList
-        |> D.get s
-        |> Maybe.withDefault "ERROR"
+        |> List.concatMap Tuple.second
+        |> List.map (\( x, y ) -> String.replace y x)
+        |> List.foldl (<<) identity
 
 
 arity : Int -> List String
@@ -142,7 +126,7 @@ expr =
                         BracketError tag e1 e2
 
         func ar x =
-            P.succeed (ar <| Op x) |. P.symbol (unicodeToTex x)
+            P.succeed (ar <| Op x) |. P.symbol x
 
         -- arity 0
         --     |> List.map
