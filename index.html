@@ -9,28 +9,26 @@
     <div id="isklo"></div>
   </body>
   <script type="module">
-    const egg = new Worker("egg.mjs", { type: "module" });
-  (async () => {
-    var app = Elm.Main.init({
-        node: document.getElementById('isklo')
-    });
-    app.ports.requestExplanation.subscribe(function(input) {
-      egg.postMessage(input);
+    (async () => {
+      const egg = new Worker("egg.mjs", { type: "module" });
+      var app = Elm.Main.init({ node: document.getElementById('isklo') });
       egg.onmessage = (e) => app.ports.gotExplanation.send(e.data);
-      // app.ports.gotExplanation.send([JSON.stringify(egraph(input[0], input[1]))]);
-    });
-
-    // Mouse selections
-    const inputExpr = document.getElementById("input-expr");
-    addEventListener("selectionchange", (event) => {
-      app.ports.selectionChanged.send({ start: inputExpr.selectionStart, end: inputExpr.selectionEnd})
-    });
-    app.ports.changeSelection.subscribe(selection => {
-      requestAnimationFrame(() => {
-        inputExpr.selectionStart = selection.start; 
-        inputExpr.selectionEnd = selection.end;
+      app.ports.requestExplanation.subscribe((input) => {
+        egg.postMessage(input);
+        // app.ports.gotExplanation.send([JSON.stringify(egraph(input[0], input[1]))]);
       });
-    });
-  })();
+
+      // Mouse selections
+      const inputExpr = document.getElementById("input-expr");
+      addEventListener("selectionchange", (event) => {
+        app.ports.selectionChanged.send({ start: inputExpr.selectionStart, end: inputExpr.selectionEnd})
+      });
+      app.ports.changeSelection.subscribe(selection => {
+        requestAnimationFrame(() => {
+          inputExpr.selectionStart = selection.start; 
+          inputExpr.selectionEnd = selection.end;
+        });
+      });
+    })();
   </script>
 </html>

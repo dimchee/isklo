@@ -35,7 +35,7 @@ type alias Selection =
 
 type alias Model =
     { explanation : List String
-    , expr : String
+    , inputString : String
     , selection : Selection
     }
 
@@ -48,35 +48,16 @@ type Msg
     | NoOp
 
 
-reqExp : String -> Cmd msg
-reqExp expr =
-    requestExplanation
-        ( Rule.logicRules ++ List.map Rule.revRule Rule.logicRules, expr )
-
-
 main : Program () Model Msg
 main =
-    let
-        initExpr =
-            "((p ∧ q) ⇒  (q ∧ p))"
-
-        initExplanation =
-            [ "(⇒ (∧ p q) (∧ q p))"
-            , "(⇒ (∧ p q) (Rewrite<= commut_land (∧ p q)))"
-            , "(Rewrite=> impl_def (∨ (¬ (∧ p q)) (∧ p q)))"
-            , "(∨ (¬ (∧ p q)) (Rewrite=> lnot_lnot_p (¬ (¬ (∧ p q)))))"
-            , "(Rewrite=> p_lor_lnot_p ⊤)"
-            ]
-
-        initModel : Model
-        initModel =
-            { expr = initExpr
-            , explanation = initExplanation
-            , selection = { start = 0, end = 0 }
-            }
-    in
     Browser.element
-        { init = always <| update Explain initModel
+        { init =
+            always <|
+                update Explain <|
+                    { inputString = "((p ⇒ q) ⇔(¬ q ⇒ ¬p))"
+                    , explanation = []
+                    , selection = { start = 0, end = 0 }
+                    }
         , view = view >> E.layout []
         , update = update
         , subscriptions =
@@ -94,7 +75,7 @@ update msg model =
         ExprChanged str ->
             let
                 delta =
-                    String.length str - String.length model.expr
+                    String.length str - String.length model.inputString
 
                 newSelection =
                     model.selection
@@ -106,7 +87,7 @@ update msg model =
                                     { start = start, end = start }
                            )
             in
-            ( { model | expr = str, selection = newSelection }
+            ( { model | inputString = str, selection = newSelection }
             , newSelection
                 |> changeSelection
             )
@@ -121,10 +102,10 @@ update msg model =
 
         Explain ->
             ( model
-            , Language.parse model.expr
-                |> Result.toMaybe
-                |> Maybe.andThen Language.toSExpr
-                |> Maybe.map reqExp
+            , Language.parse model.inputString
+                |> Language.toSExpr
+                |> Maybe.map
+                    (\expr -> requestExplanation ( Rule.logicRules, expr ))
                 |> Maybe.withDefault Cmd.none
             )
 
@@ -144,11 +125,11 @@ viewExplanation ss =
         { data = List.filterMap getRewrite ss
         , columns =
             [ { header = E.text "Expression"
-              , width = E.fill
+              , width = E.shrink
               , view = \{ expr } -> E.text expr
               }
             , { header = E.text "Rule"
-              , width = E.fill
+              , width = E.shrink
               , view = \{ rules } -> List.map E.text rules |> E.row []
               }
             ]
@@ -157,26 +138,22 @@ viewExplanation ss =
 
 view : Model -> E.Element Msg
 view model =
+    let
+        expr =
+            Language.parse model.inputString
+    in
     E.column [ E.padding 50, E.width E.fill, E.spacing 20 ]
         [ E.row [ E.width E.fill, E.padding 20, E.spacing 20 ]
             [ EI.text [ E.width E.fill, E.htmlAttribute <| HA.id "input-expr" ]
                 { onChange = Language.texToUnicode >> ExprChanged
                 , placeholder = Just <| EI.placeholder [] <| E.text "Expr..."
                 , label = EI.labelHidden "Expression"
-                , text = model.expr
+                , text = model.inputString
                 }
             , EI.button [ Border.width 2, E.padding 10 ]
                 { onPress = Just Explain, label = E.text "explain" }
             ]
-        , model.expr |> Language.texToUnicode |> E.text
-        , E.row [ E.spacing 50, E.padding 20 ] <|
-            case Language.parse model.expr of
-                Ok e ->
-                    [ TreeDraw.viewExpr e |> Html.map (always NoOp) |> E.html |> E.el []
-                    , Table.view e |> E.html |> E.el []
-                    ]
-
-                Err e ->
-                    [ E.text <| Debug.toString e ]
-        , E.row [] <| [ viewExplanation model.explanation ]
+        , TreeDraw.viewExpr expr |> Html.map (always NoOp) |> E.html |> E.el []
+        , Table.view expr |> E.html |> E.el []
+        , viewExplanation model.explanation
         ]

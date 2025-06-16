@@ -36,7 +36,7 @@ type ExprTag
     | Op String
 
 
-parse : String -> Result (List P.DeadEnd) Expr
+parse : String -> Expr
 parse =
     P.run
         (P.succeed (\e f -> f e)
@@ -44,6 +44,7 @@ parse =
             |. P.spaces
             |= P.oneOf [ P.succeed identity |. P.end, P.succeed LongInput ]
         )
+        >> Result.withDefault Impossible
 
 
 variable : Parser Expr
