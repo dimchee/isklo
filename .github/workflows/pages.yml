@@ -42,7 +42,7 @@ jobs:
       - name: Make Elm page
         run: elm make src/Main.elm --output www/elm.js
       - name: Upload artifact
-        uses: actions/upload-pages-artifact@v1
+        uses: actions/upload-pages-artifact@v3
         with:
           path: '.'
       - name: Deploy to GitHub Pages
