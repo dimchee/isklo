@@ -26,7 +26,6 @@ type Expr
     | LongInput Expr
 
 
-
 varTags : List String
 varTags =
     [ "p", "q", "r", "s" ]
@@ -154,19 +153,22 @@ expr =
 
 
 toSExpr : Expr -> Maybe String
-toSExpr e = 
+toSExpr e =
     case e of
         Nullary tag ->
             Just <| renderTag tag
 
         Unary tag child ->
-            Just <| "(" ++ renderTag tag ++ renderExpr child ++ ")"
+            toSExpr child |> Maybe.map (\x -> "(" ++ renderTag tag ++ " " ++ x ++ ")")
 
         Binary tag l r ->
-            Just <| "(" ++ renderTag tag ++ renderExpr l ++  renderExpr r ++ ")"
+            Maybe.map2 (\x y -> "(" ++ renderTag tag ++ " " ++ x ++ " " ++ y ++ ")")
+                (toSExpr l)
+                (toSExpr r)
 
         _ ->
-          Nothing
+            Nothing
+
 
 renderExpr : Expr -> String
 renderExpr e =

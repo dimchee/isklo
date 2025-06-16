@@ -1,4 +1,4 @@
-module RecExpr exposing (Expr(..), parse, print)
+module RecExpr exposing (Expr(..), parse, toRewrite)
 
 import Parser as P exposing ((|.), (|=), Parser)
 
@@ -37,16 +37,37 @@ expr =
                 (P.chompWhile (\c -> c /= '(' && c /= ')' && c /= ' '))
         ]
 
-print : Expr -> (String, List String)
-print e = case e of
-    Ls [Tag "Rewrite<=", Tag name, x] -> Tuple.mapSecond ((::) name) <| print x
-    Ls [Tag "Rewrite=>", Tag name, x] -> Tuple.mapSecond ((::) name) <| print x
-    Ls [Tag op, x, y] -> 
-        let 
-            (px, xs) = print x
-            (py, ys) = print y
-        in
-        ("(" ++ px ++ op ++ py ++ ")", xs ++ ys)
-    Ls [Tag op, x] -> Tuple.mapFirst (\a -> op ++ a) <| print x
-    Tag s -> (s, [])
-    _ -> ("Todo", [])
+
+type alias Rewrite =
+    { expr : String
+    , rules : List String
+    }
+
+
+toRewrite : Expr -> Maybe Rewrite
+toRewrite =
+    print >> Maybe.map (\( e, rs ) -> { expr = e, rules = rs })
+
+
+print : Expr -> Maybe ( String, List String )
+print e =
+    case e of
+        Ls [ Tag "Rewrite<=", Tag name, x ] ->
+            print x |> Maybe.map (Tuple.mapSecond ((::) name))
+
+        Ls [ Tag "Rewrite=>", Tag name, x ] ->
+            print x |> Maybe.map (Tuple.mapSecond ((::) name))
+
+        Ls [ Tag op, x, y ] ->
+            Maybe.map2 (\(px, xs) (py, ys) ->
+            ( "(" ++ px ++ op ++ py ++ ")", xs ++ ys ))
+                (print x) (print y)
+
+        Ls [ Tag op, x ] ->
+            print x |> Maybe.map (Tuple.mapFirst (\a -> op ++ a))
+
+        Tag s ->
+            Just ( s, [] )
+
+        _ ->
+            Nothing

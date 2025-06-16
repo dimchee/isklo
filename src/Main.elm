@@ -1,7 +1,6 @@
 port module Main exposing (..)
 
 -- reingold tilford '81
--- import RecExpr
 
 import Browser
 import Element as E
@@ -10,6 +9,7 @@ import Element.Input as EI
 import Html
 import Html.Attributes as HA
 import Language exposing (Expr(..))
+import RecExpr
 import Rule exposing (Rule)
 import Table
 import TreeDraw
@@ -34,8 +34,7 @@ type alias Selection =
 
 
 type alias Model =
-    { draft : String
-    , explanation : List String
+    { explanation : List String
     , expr : String
     , selection : Selection
     }
@@ -44,7 +43,7 @@ type alias Model =
 type Msg
     = ExprChanged String
     | SelectionChanged { start : Int, end : Int }
-    | Explain 
+    | Explain
     | GotExplanation (List String)
     | NoOp
 
@@ -52,12 +51,7 @@ type Msg
 reqExp : String -> Cmd msg
 reqExp expr =
     requestExplanation
-        ( Rule.logicRules ++ List.map Rule.revRule Rule.logicRules
-          -- , "(⇔ (∧ q p) (∧ p q))"
-          -- , "(⇒ (∧ (⇒ p q) (⇒ q r)) (⇒ p r))"
-        , expr
-          --, "(⇒ p (∨ p q))"
-        )
+        ( Rule.logicRules ++ List.map Rule.revRule Rule.logicRules, expr )
 
 
 main : Program () Model Msg
@@ -66,12 +60,23 @@ main =
         initExpr =
             "((p ∧ q) ⇒  (q ∧ p))"
 
+        initExplanation =
+            [ "(⇒ (∧ p q) (∧ q p))"
+            , "(⇒ (∧ p q) (Rewrite<= commut_land (∧ p q)))"
+            , "(Rewrite=> impl_def (∨ (¬ (∧ p q)) (∧ p q)))"
+            , "(∨ (¬ (∧ p q)) (Rewrite=> lnot_lnot_p (¬ (¬ (∧ p q)))))"
+            , "(Rewrite=> p_lor_lnot_p ⊤)"
+            ]
+
         initModel : Model
         initModel =
-            { draft = "", expr = initExpr, explanation = [], selection = { start = 0, end = 0 } }
+            { expr = initExpr
+            , explanation = initExplanation
+            , selection = { start = 0, end = 0 }
+            }
     in
     Browser.element
-        { init = always ( initModel, Cmd.none )
+        { init = always <| update Explain initModel
         , view = view >> E.layout []
         , update = update
         , subscriptions =
@@ -117,7 +122,7 @@ update msg model =
         Explain ->
             ( model
             , Language.parse model.expr
-                |> Result.toMaybe 
+                |> Result.toMaybe
                 |> Maybe.andThen Language.toSExpr
                 |> Maybe.map reqExp
                 |> Maybe.withDefault Cmd.none
@@ -127,23 +132,27 @@ update msg model =
             ( model, Cmd.none )
 
 
-viewExplanation : ( String, List String ) -> E.Element Msg
-viewExplanation ( s, ss ) =
-    E.text s
-        :: List.map E.text ss
-        |> E.column []
-
-
-
--- Html.div
---     [ HA.style "display" "flex"
---     , HA.style "flex-direction" "row"
---     , HA.style "justify-content" "space-between"
---     , HA.style "width" "400px"
---     ]
---     [ Html.text s
---     , Html.div [] <| List.map Html.text ss
---     ]
+viewExplanation : List String -> E.Element Msg
+viewExplanation ss =
+    let
+        getRewrite =
+            RecExpr.parse
+                >> Result.toMaybe
+                >> Maybe.andThen RecExpr.toRewrite
+    in
+    E.table [ E.spacingXY 20 5, E.padding 20 ]
+        { data = List.filterMap getRewrite ss
+        , columns =
+            [ { header = E.text "Expression"
+              , width = E.fill
+              , view = \{ expr } -> E.text expr
+              }
+            , { header = E.text "Rule"
+              , width = E.fill
+              , view = \{ rules } -> List.map E.text rules |> E.row []
+              }
+            ]
+        }
 
 
 view : Model -> E.Element Msg
@@ -157,7 +166,7 @@ view model =
                 , text = model.expr
                 }
             , EI.button [ Border.width 2, E.padding 10 ]
-                { onPress = Just Explain , label = E.text "explain" }
+                { onPress = Just Explain, label = E.text "explain" }
             ]
         , model.expr |> Language.texToUnicode |> E.text
         , E.row [ E.spacing 50, E.padding 20 ] <|
@@ -169,5 +178,5 @@ view model =
 
                 Err e ->
                     [ E.text <| Debug.toString e ]
-        , E.row [] <| [ viewExplanation ( model.expr, model.explanation ) ]
+        , E.row [] <| [ viewExplanation model.explanation ]
         ]
