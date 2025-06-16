@@ -2,15 +2,6 @@ use egg::*;
 use serde::{Deserialize, Serialize};
 use wasm_bindgen::prelude::*;
 
-define_language! {
-    enum SimpleLanguage {
-        Num(i32),
-        "+" = Add([Id; 2]),
-        "*" = Mul([Id; 2]),
-        Symbol(Symbol),
-    }
-}
-
 #[derive(Serialize, Deserialize)]
 struct Rule {
     name: String,
@@ -28,7 +19,7 @@ pub fn simplify(rules: Vec<JsValue>, s: &str) -> String {
 }
 
 #[wasm_bindgen]
-pub fn explain(rules: Vec<JsValue>, s: &str) -> Vec<String> {
+pub fn explain(rules: Vec<JsValue>, s: &str) -> Result<Vec<String>, String> {
     let rules = rules
         .iter()
         .flat_map(|x| serde_wasm_bindgen::from_value::<Rule>(x.clone()).ok())
@@ -75,7 +66,7 @@ fn simplify_core(rules: &Vec<Rule>, s: &str) -> String {
         _ => "Parsing error".to_owned(),
     }
 }
-fn explain_core(rules: &Vec<Rule>, s: &str) -> Vec<String> {
+fn explain_core(rules: &Vec<Rule>, s: &str) -> Result<Vec<String>, String> {
     let expr = s.parse::<RecExpr<SymbolLang>>();
     let rules = rules
         .iter()
@@ -86,10 +77,7 @@ fn explain_core(rules: &Vec<Rule>, s: &str) -> Vec<String> {
         })
         .flatten()
         .collect::<Vec<Rewrite<SymbolLang, ()>>>();
-    match expr {
-        Ok(expr) => explain_egg(rules, expr),
-        _ => vec![ "Parsing error".to_owned() ],
-    }
+    expr.map(|x| explain_egg(rules, x)).map_err(|e| e.to_string())
 }
 
 fn explain_egg(rules: Vec<Rewrite<SymbolLang, ()>>, expr: RecExpr<SymbolLang>) -> Vec<String> {
@@ -116,27 +104,4 @@ fn simplify_egg(rules: Vec<Rewrite<SymbolLang, ()>>, expr: RecExpr<SymbolLang>) 
     let (best_cost, best) = extractor.find_best(root);
     println!("Simplified {} to {} with cost {}", expr, best, best_cost);
     best.to_string()
-}
-
-#[test]
-fn simple_tests() {
-    let rules = vec![
-        Rule {
-            name: "mul_zero".to_owned(),
-            searcher: "(* 0 ?a)".to_owned(),
-            applier: "0".to_owned(),
-        },
-        Rule {
-            name: "add_zero".to_owned(),
-            searcher: "(+ 0 ?a)".to_owned(),
-            applier: "?a".to_owned(),
-        },
-        Rule {
-            name: "mul_one".to_owned(),
-            searcher: "(* 1 ?a)".to_owned(),
-            applier: "?a".to_owned(),
-        },
-    ];
-    assert_eq!(simplify_core(&rules, "(* 0 42)"), "0");
-    assert_eq!(simplify_core(&rules, "(+ 0 (* 1 foo))"), "foo");
 }

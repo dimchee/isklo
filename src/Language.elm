@@ -6,6 +6,7 @@ module Language exposing
     , renderExpr
     , renderTag
     , texToUnicode
+    , toSExpr
     )
 
 import Dict as D
@@ -151,6 +152,21 @@ expr =
     ]
         |> P.oneOf
 
+
+toSExpr : Expr -> Maybe String
+toSExpr e = 
+    case e of
+        Nullary tag ->
+            Just <| renderTag tag
+
+        Unary tag child ->
+            Just <| "(" ++ renderTag tag ++ renderExpr child ++ ")"
+
+        Binary tag l r ->
+            Just <| "(" ++ renderTag tag ++ renderExpr l ++  renderExpr r ++ ")"
+
+        _ ->
+          Nothing
 
 renderExpr : Expr -> String
 renderExpr e =
